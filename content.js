@@ -103,11 +103,11 @@
     });
 
     // 5. Repeated pairs: aabbccdd and aaaabbbb — all 2-digit combos
-    for (let a = 0; a <= 9; a += 1) {
-      for (let b = 0; b <= 9; b += 1) {
-        add(String(a).repeat(2) + String(b).repeat(2) + String(a).repeat(2) + String(b).repeat(2));
-        add(String(a).repeat(4) + String(b).repeat(4));
-        add(String(a).repeat(2) + String(b).repeat(2) + String(b).repeat(2) + String(a).repeat(2));
+    for (let firstDigit = 0; firstDigit <= 9 && output.length < count; firstDigit += 1) {
+      for (let secondDigit = 0; secondDigit <= 9 && output.length < count; secondDigit += 1) {
+        add(String(firstDigit).repeat(2) + String(secondDigit).repeat(2) + String(firstDigit).repeat(2) + String(secondDigit).repeat(2));
+        add(String(firstDigit).repeat(4) + String(secondDigit).repeat(4));
+        add(String(firstDigit).repeat(2) + String(secondDigit).repeat(2) + String(secondDigit).repeat(2) + String(firstDigit).repeat(2));
       }
     }
 
@@ -119,10 +119,10 @@
     }
 
     // 7. Alternating two digits: ababababab
-    for (let a = 0; a <= 9; a += 1) {
-      for (let b = a + 1; b <= 9; b += 1) {
-        add((String(a) + String(b)).repeat(4));
-        add((String(b) + String(a)).repeat(4));
+    for (let firstDigit = 0; firstDigit <= 9 && output.length < count; firstDigit += 1) {
+      for (let secondDigit = firstDigit + 1; secondDigit <= 9 && output.length < count; secondDigit += 1) {
+        add((String(firstDigit) + String(secondDigit)).repeat(4));
+        add((String(secondDigit) + String(firstDigit)).repeat(4));
       }
     }
 
