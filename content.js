@@ -1,11 +1,13 @@
 (() => {
   const FIXED_PREFIX = "+88016";
   const TOTAL_CHECKS = 1000;
-  const MIN_DELAY_MS = 300;
-  const MAX_DELAY_MS = 700;
-  const RESULT_WAIT_TIMEOUT_MS = 4500;
-  const RESULT_POLL_INTERVAL_MS = 120;
+  const MIN_DELAY_MS = 120;
+  const MAX_DELAY_MS = 260;
+  const RESULT_WAIT_TIMEOUT_MS = 2800;
+  const RESULT_POLL_INTERVAL_MS = 80;
   const MAX_FALLBACK_ELEMENTS = 300;
+  const REFRESH_AVAILABILITY_ELEMENTS_EVERY_POLLS = 6;
+  const MAX_SCOPED_FALLBACK_TEXT_LENGTH = 8000;
   const MAX_LOCAL_CONTEXT_TEXT_LENGTH = 600;
   const PERSIST_EVERY_N_CHECKS = 10;
   const INPUT_SCORE_STRONG_MATCH = 120;
@@ -28,6 +30,8 @@
   };
   let cachedEditableInput = null;
   let cachedCandidates = null;
+  let cachedAvailabilityScope = null;
+  let cachedAvailabilityElements = null;
   let activeRunId = 0;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -352,8 +356,17 @@
     return null;
   }
 
-  function collectAvailabilityElements(input) {
+  function collectAvailabilityElements(input, forceRefresh = false) {
     const scope = input.closest("form, section, article, main, .container, .card, .row") || document.body;
+    if (
+      !forceRefresh &&
+      cachedAvailabilityScope === scope &&
+      Array.isArray(cachedAvailabilityElements) &&
+      cachedAvailabilityElements.length
+    ) {
+      return cachedAvailabilityElements.filter((el) => el?.isConnected && isVisibleElement(el));
+    }
+
     const focusedSelectors = [
       '[aria-live]',
       '[role="status"]',
@@ -380,11 +393,14 @@
           return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
           });
 
-    return [...focused, ...fallback].filter(isVisibleElement);
+    const elements = [...focused, ...fallback].filter(isVisibleElement);
+    cachedAvailabilityScope = scope;
+    cachedAvailabilityElements = elements;
+    return elements;
   }
 
-  function detectAvailabilityFromDom(input) {
-    const candidates = collectAvailabilityElements(input);
+  function detectAvailabilityFromDom(input, forceRefresh = false) {
+    const candidates = collectAvailabilityElements(input, forceRefresh);
     if (candidates.length === 0) {
       return null;
     }
@@ -408,18 +424,25 @@
 
   async function waitForDomAvailability(input, runId) {
     const start = Date.now();
+    let pollCount = 0;
     while (Date.now() - start < RESULT_WAIT_TIMEOUT_MS) {
       if (isRunCancelled(runId)) {
         return null;
       }
-      const signal = detectAvailabilityFromDom(input);
+      pollCount += 1;
+      const signal = detectAvailabilityFromDom(
+        input,
+        pollCount % REFRESH_AVAILABILITY_ELEMENTS_EVERY_POLLS === 0
+      );
       if (signal !== null) {
         return signal;
       }
       await sleep(RESULT_POLL_INTERVAL_MS);
     }
 
-    const text = normalizeSpaceText(document.body?.innerText || "");
+    const scope =
+      input.closest("form, section, article, main, .container, .card, .row") || document.body;
+    const text = normalizeSpaceText((scope?.innerText || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
     if (!text) {
       return false;
     }
@@ -514,6 +537,8 @@
     activeRunId += 1;
     state.running = false;
     state.currentNumber = "";
+    cachedAvailabilityScope = null;
+    cachedAvailabilityElements = null;
   }
 
   async function loadSearchData() {
@@ -545,6 +570,8 @@
       state.checked = 0;
       state.currentNumber = "";
       state.lastError = "";
+      cachedAvailabilityScope = null;
+      cachedAvailabilityElements = null;
       persistSearchData().finally(() => sendResponse({ ok: true }));
       return true;
     }
