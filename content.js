@@ -435,6 +435,7 @@
       throw new Error("Could not find an editable number input on page.");
     }
 
+    // On Airtel's search flow, +88016 is fixed by the page UI, so this field must receive only the 8-digit suffix.
     const finalValue = suffix;
 
     setInputValue(input, finalValue);
