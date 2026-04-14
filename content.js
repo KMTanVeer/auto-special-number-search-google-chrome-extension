@@ -5,6 +5,8 @@
   const MAX_DELAY_MS = 700;
   const RESULT_WAIT_TIMEOUT_MS = 4500;
   const RESULT_POLL_INTERVAL_MS = 120;
+  const MAX_FALLBACK_ELEMENTS = 300;
+  const PERSIST_EVERY_N_CHECKS = 10;
   const SMART_PATTERNS = ["1111", "2222", "1234", "0000", "786", "9999", "1212"];
   const PRIORITY_FULL_NUMBERS = ["+8801632231309"];
 
@@ -18,9 +20,11 @@
     lastError: ""
   };
   let cachedEditableInput = null;
+  let cachedCandidates = null;
   let activeRunId = 0;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const isRunCancelled = (runId) => !state.running || runId !== activeRunId;
 
   const randomBetween = (min, max) =>
     Math.floor(Math.random() * (max - min + 1)) + min;
@@ -76,7 +80,10 @@
       add("9999" + pattern);
     });
 
-    for (let i = 0; i <= 99 && output.length < count; i += 1) {
+    for (let i = 0; i <= 99; i += 1) {
+      if (output.length >= count) {
+        break;
+      }
       const n2 = String(i).padStart(2, "0");
       const n4 = String(i).padStart(4, "0");
       SMART_PATTERNS.forEach((pattern) => {
@@ -235,10 +242,12 @@
     const focused = Array.from(scope.querySelectorAll(focusedSelectors));
     const fallback = focused.length
       ? []
-      : Array.from(scope.querySelectorAll(fallbackSelectors)).filter((el) => {
+      : Array.from(scope.querySelectorAll(fallbackSelectors))
+          .slice(0, MAX_FALLBACK_ELEMENTS)
+          .filter((el) => {
           const text = normalizeSpaceText(el.textContent);
           return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
-        });
+          });
 
     return [...focused, ...fallback].filter(isVisibleElement);
   }
@@ -269,7 +278,7 @@
   async function waitForDomAvailability(input, runId) {
     const start = Date.now();
     while (Date.now() - start < RESULT_WAIT_TIMEOUT_MS) {
-      if (!state.running || runId !== activeRunId) {
+      if (isRunCancelled(runId)) {
         return null;
       }
       const signal = detectAvailabilityFromDom(input);
@@ -328,11 +337,12 @@
     state.currentNumber = "";
     state.lastError = "";
 
-    const candidates = generateSpecialCandidates(state.total);
+    cachedCandidates = cachedCandidates || generateSpecialCandidates(state.total);
+    const candidates = cachedCandidates;
     const checkedSet = new Set(state.checkedSuffixes);
 
     for (const suffix of candidates) {
-      if (!state.running || runId !== activeRunId || state.checked >= state.total) {
+      if (isRunCancelled(runId) || state.checked >= state.total) {
         break;
       }
       if (checkedSet.has(suffix)) {
@@ -355,14 +365,13 @@
       }
 
       state.checked += 1;
-      if (state.checked % 10 === 0) {
+      if (state.checked % PERSIST_EVERY_N_CHECKS === 0) {
         await persistSearchData();
       }
 
-      if (!state.running || runId !== activeRunId || state.checked >= state.total) {
-        break;
+      if (!isRunCancelled(runId) && state.checked < state.total) {
+        await sleep(randomBetween(MIN_DELAY_MS, MAX_DELAY_MS));
       }
-      await sleep(randomBetween(MIN_DELAY_MS, MAX_DELAY_MS));
     }
 
     if (runId === activeRunId) {

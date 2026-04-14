@@ -141,14 +141,9 @@ exportBtn.addEventListener("click", async () => {
 
 clearBtn.addEventListener("click", async () => {
   try {
-    let clearedInTab = false;
     try {
       await sendToActiveTab({ type: "clear-found" });
-      clearedInTab = true;
     } catch {
-      clearedInTab = false;
-    }
-    if (!clearedInTab) {
       await chrome.storage.local.set({ foundNumbers: [], checkedSuffixes: [], checkedCount: 0 });
     }
     await refreshState();
