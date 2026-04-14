@@ -435,18 +435,7 @@
       throw new Error("Could not find an editable number input on page.");
     }
 
-    const fieldValue = input.value || "";
-    const currentDigits = normalizeDigits(fieldValue);
-    const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
-    const inputHints = normalizeSpaceText(
-      [input.placeholder, input.getAttribute("aria-label"), input.name, input.id].filter(Boolean).join(" ")
-    );
-    const inputHintDigits = normalizeDigits(inputHints);
-    const wantsSuffixOnly =
-      input.maxLength === 8 ||
-      currentDigits.startsWith(fixedPrefixDigits) ||
-      inputHintDigits.includes(fixedPrefixDigits);
-    const finalValue = wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`;
+    const finalValue = suffix;
 
     setInputValue(input, finalValue);
 
