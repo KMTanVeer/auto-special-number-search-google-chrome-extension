@@ -14,24 +14,7 @@
   const INPUT_SCORE_NEGATIVE = -200;
   const INPUT_MIN_ACCEPTABLE_SCORE = -500;
   const SMART_PATTERNS = ["1111", "2222", "1234", "0000", "786", "9999", "1212"];
-  const CURATED_SPECIAL_SUFFIXES = [
-    "12345678",
-    "87654321",
-    "11223344",
-    "44332211",
-    "12121212",
-    "56565656",
-    "16000016",
-    "16888888",
-    "16777777",
-    "16666666",
-    "10000001",
-    "10203040",
-    "13572468",
-    "24681357",
-    "31415926",
-    "27182818"
-  ];
+  const LUCKY_CORES = ["786", "888", "777", "999", "555", "666", "444", "333", "222", "111", "000"];
   const PRIORITY_FULL_NUMBERS = ["+8801632231309"];
 
   const state = {
@@ -88,9 +71,62 @@
       }
     };
 
+    // 1. Priority explicit numbers
     PRIORITY_FULL_NUMBERS.forEach((full) => add(normalizeDigits(full).slice(-8)));
-    CURATED_SPECIAL_SUFFIXES.forEach(add);
 
+    // 2. All-same digit: 00000000 … 99999999
+    for (let d = 0; d <= 9; d += 1) {
+      add(String(d).repeat(8));
+    }
+
+    // 3. Sequential runs (ascending and descending, wrapping 0–9)
+    for (let start = 0; start <= 9; start += 1) {
+      const asc = Array.from({ length: 8 }, (_, k) => (start + k) % 10).join("");
+      const desc = Array.from({ length: 8 }, (_, k) => (start - k + 10) % 10).join("");
+      add(asc);
+      add(desc);
+    }
+
+    // 4. Lucky-number cores: each core and its combos
+    LUCKY_CORES.forEach((core) => {
+      const rev = core.split("").reverse().join("");
+      add(core);             // expandPatternTo8Digits stretches short cores to 8 digits
+      add(core + core);
+      add(core + core + core);
+      add("00" + core);
+      add(core + "00");
+      add("0" + core + "0");
+      add(core + rev);
+      add(rev + core);
+      add(core + "16");
+      add("16" + core);
+    });
+
+    // 5. Repeated pairs: aabbccdd and aaaabbbb — all 2-digit combos
+    for (let a = 0; a <= 9; a += 1) {
+      for (let b = 0; b <= 9; b += 1) {
+        add(String(a).repeat(2) + String(b).repeat(2) + String(a).repeat(2) + String(b).repeat(2));
+        add(String(a).repeat(4) + String(b).repeat(4));
+        add(String(a).repeat(2) + String(b).repeat(2) + String(b).repeat(2) + String(a).repeat(2));
+      }
+    }
+
+    // 6. Stepping repeated-pairs: 11223344, 22334455 …
+    for (let start = 0; start <= 9; start += 1) {
+      const stepping = Array.from({ length: 4 }, (_, k) => String((start + k) % 10).repeat(2)).join("");
+      add(stepping);
+      add(stepping.split("").reverse().join(""));
+    }
+
+    // 7. Alternating two digits: ababababab
+    for (let a = 0; a <= 9; a += 1) {
+      for (let b = a + 1; b <= 9; b += 1) {
+        add((String(a) + String(b)).repeat(4));
+        add((String(b) + String(a)).repeat(4));
+      }
+    }
+
+    // 8. SMART_PATTERNS original expansions
     SMART_PATTERNS.forEach((pattern) => {
       const reversed = pattern.split("").reverse().join("");
       add(pattern);
@@ -118,6 +154,21 @@
       });
     }
 
+    // 9. Mirror / palindrome bulk filler (abcddcba): every 4-digit half
+    for (let half = 1000; half <= 9999 && output.length < count; half += 1) {
+      const h = String(half);
+      add(h + h.split("").reverse().join(""));
+    }
+    // abbaabba and abbabaab 2-digit core mirrors
+    for (let i = 10; i <= 99 && output.length < count; i += 1) {
+      const ab = String(i);
+      const ba = ab.split("").reverse().join("");
+      add(ab + ba + ab + ba);
+      add(ab + ba + ba + ab);
+      add(ba + ab + ba + ab);
+    }
+
+    // 10. Arithmetic fill until count is satisfied
     for (let i = 0; output.length < count; i += 1) {
       const d = String(i % 10);
       const e = String((i + 3) % 10);
