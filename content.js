@@ -6,7 +6,8 @@
   const RESULT_WAIT_TIMEOUT_MS = 2800;
   const RESULT_POLL_INTERVAL_MS = 80;
   const MAX_FALLBACK_ELEMENTS = 300;
-  const REFRESH_AVAILABILITY_ELEMENTS_EVERY_POLLS = 6;
+  const REFRESH_AVAILABILITY_ELEMENTS_EVERY_N_POLLS = 6;
+  // Cap scoped text fallback size to avoid scanning very large pages on each timed-out check.
   const MAX_SCOPED_FALLBACK_TEXT_LENGTH = 8000;
   const MAX_LOCAL_CONTEXT_TEXT_LENGTH = 600;
   const PERSIST_EVERY_N_CHECKS = 10;
@@ -364,7 +365,9 @@
       Array.isArray(cachedAvailabilityElements) &&
       cachedAvailabilityElements.length
     ) {
-      return cachedAvailabilityElements.filter((el) => el?.isConnected && isVisibleElement(el));
+      if (cachedAvailabilityElements.every((el) => el?.isConnected)) {
+        return cachedAvailabilityElements;
+      }
     }
 
     const focusedSelectors = [
@@ -432,7 +435,7 @@
       pollCount += 1;
       const signal = detectAvailabilityFromDom(
         input,
-        pollCount % REFRESH_AVAILABILITY_ELEMENTS_EVERY_POLLS === 0
+        pollCount % REFRESH_AVAILABILITY_ELEMENTS_EVERY_N_POLLS === 0
       );
       if (signal !== null) {
         return signal;
@@ -442,6 +445,7 @@
 
     const scope =
       input.closest("form, section, article, main, .container, .card, .row") || document.body;
+    // Scope fallback matching near the active search area first; this is faster and avoids unrelated page text.
     const text = normalizeSpaceText((scope?.innerText || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
     if (!text) {
       return false;
