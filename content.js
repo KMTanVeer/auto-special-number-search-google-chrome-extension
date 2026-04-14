@@ -457,15 +457,30 @@
     ].join(", ");
     const fallbackSelectors = "p, span, div, li, strong";
 
-    const focused = Array.from(scope.querySelectorAll(focusedSelectors));
+    const focused = Array.from(scope.querySelectorAll(focusedSelectors)).filter(isVisibleElement);
+    const focusedWithSignal = focused.filter((el) => {
+      const text = normalizeSpaceText(el.textContent);
+      return availabilitySignalFromText(text) !== null;
+    });
+    if (focusedWithSignal.length) {
+      cachedAvailabilityScope = scope;
+      cachedAvailabilityElements = focusedWithSignal;
+      return focusedWithSignal;
+    }
+
     const fallback = Array.from(scope.querySelectorAll(fallbackSelectors))
       .slice(0, MAX_FALLBACK_ELEMENTS)
       .filter((el) => {
         const text = normalizeSpaceText(el.textContent);
-        return availabilitySignalFromText(text) !== null;
+        return availabilitySignalFromText(text) !== null && isVisibleElement(el);
       });
 
-    const elements = Array.from(new Set([...focused, ...fallback])).filter(isVisibleElement);
+    const elements = [...focused];
+    fallback.forEach((el) => {
+      if (!elements.includes(el)) {
+        elements.push(el);
+      }
+    });
     cachedAvailabilityScope = scope;
     cachedAvailabilityElements = elements;
     return elements;
