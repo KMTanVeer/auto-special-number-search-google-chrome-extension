@@ -6,8 +6,15 @@
   const RESULT_WAIT_TIMEOUT_MS = 4500;
   const RESULT_POLL_INTERVAL_MS = 120;
   const MAX_FALLBACK_ELEMENTS = 300;
+  const MAX_LOCAL_CONTEXT_TEXT_LENGTH = 600;
   const PERSIST_EVERY_N_CHECKS = 10;
+  const INPUT_SCORE_STRONG_MATCH = 120;
+  const INPUT_SCORE_MATCH = 40;
+  const INPUT_SCORE_SEARCH_TYPE = 20;
+  const INPUT_SCORE_NEGATIVE = -200;
+  const INPUT_MIN_ACCEPTABLE_SCORE = -500;
   const SMART_PATTERNS = ["1111", "2222", "1234", "0000", "786", "9999", "1212"];
+  const LUCKY_CORES = ["786", "888", "777", "999", "555", "666", "444", "333", "222", "111", "000"];
   const PRIORITY_FULL_NUMBERS = ["+8801632231309"];
 
   const state = {
@@ -64,8 +71,62 @@
       }
     };
 
+    // 1. Priority explicit numbers
     PRIORITY_FULL_NUMBERS.forEach((full) => add(normalizeDigits(full).slice(-8)));
 
+    // 2. All-same digit: 00000000 … 99999999
+    for (let d = 0; d <= 9; d += 1) {
+      add(String(d).repeat(8));
+    }
+
+    // 3. Sequential runs (ascending and descending, wrapping 0–9)
+    for (let start = 0; start <= 9; start += 1) {
+      const asc = Array.from({ length: 8 }, (_, k) => (start + k) % 10).join("");
+      const desc = Array.from({ length: 8 }, (_, k) => (start - k + 10) % 10).join("");
+      add(asc);
+      add(desc);
+    }
+
+    // 4. Lucky-number cores: each core and its combos
+    LUCKY_CORES.forEach((core) => {
+      const rev = core.split("").reverse().join("");
+      add(core);             // expandPatternTo8Digits stretches short cores to 8 digits
+      add(core + core);
+      add(core + core + core);
+      add("00" + core);
+      add(core + "00");
+      add("0" + core + "0");
+      add(core + rev);
+      add(rev + core);
+      add(core + "16");
+      add("16" + core);
+    });
+
+    // 5. Repeated pairs: aabbccdd and aaaabbbb — all 2-digit combos
+    for (let firstDigit = 0; firstDigit <= 9 && output.length < count; firstDigit += 1) {
+      for (let secondDigit = 0; secondDigit <= 9 && output.length < count; secondDigit += 1) {
+        add(String(firstDigit).repeat(2) + String(secondDigit).repeat(2) + String(firstDigit).repeat(2) + String(secondDigit).repeat(2));
+        add(String(firstDigit).repeat(4) + String(secondDigit).repeat(4));
+        add(String(firstDigit).repeat(2) + String(secondDigit).repeat(2) + String(secondDigit).repeat(2) + String(firstDigit).repeat(2));
+      }
+    }
+
+    // 6. Stepping repeated-pairs: 11223344, 22334455 …
+    for (let start = 0; start <= 9; start += 1) {
+      const stepping = Array.from({ length: 4 }, (_, k) => String((start + k) % 10).repeat(2)).join("");
+      add(stepping);
+      add(stepping.split("").reverse().join(""));
+    }
+
+    // 7. Alternating two digits: ababababab
+    for (let firstDigit = 0; firstDigit <= 9 && output.length < count; firstDigit += 1) {
+      for (let secondDigit = firstDigit + 1; secondDigit <= 9 && output.length < count; secondDigit += 1) {
+        add((String(firstDigit) + String(secondDigit)).repeat(4));
+        add((String(secondDigit) + String(firstDigit)).repeat(4));
+      }
+    }
+
+    // 8. SMART_PATTERNS original expansions
     SMART_PATTERNS.forEach((pattern) => {
       const reversed = pattern.split("").reverse().join("");
       add(pattern);
@@ -93,6 +154,21 @@
       });
     }
 
+    // 9. Mirror / palindrome bulk filler (abcddcba): every 4-digit half
+    for (let half = 1000; half <= 9999 && output.length < count; half += 1) {
+      const h = String(half);
+      add(h + h.split("").reverse().join(""));
+    }
+    // abbaabba and abbabaab 2-digit core mirrors
+    for (let i = 10; i <= 99 && output.length < count; i += 1) {
+      const ab = String(i);
+      const ba = ab.split("").reverse().join("");
+      add(ab + ba + ab + ba);
+      add(ab + ba + ba + ab);
+      add(ba + ab + ba + ab);
+    }
+
+    // 10. Arithmetic fill until count is satisfied
     for (let i = 0; output.length < count; i += 1) {
       const d = String(i % 10);
       const e = String((i + 3) % 10);
@@ -103,6 +179,7 @@
       add(`${d}${e}${f}${d}${e}${f}${d}${e}`);
       add(`${i}`.padStart(4, "0").repeat(2));
       add(`${i}`.padStart(8, "0").split("").reverse().join(""));
+      add(String(randomBetween(0, 99999999)).padStart(8, "0"));
     }
 
     return output.slice(0, count);
@@ -132,20 +209,61 @@
       document.querySelectorAll('input[type="text"], input[type="tel"], input:not([type])')
     );
 
+    const candidates = inputs.filter((el) => !el.disabled && !el.readOnly && isVisible(el));
+    const scored = candidates
+      .map((el) => ({ el, score: scoreInputCandidate(el) }))
+      .sort((a, b) => b.score - a.score);
+
     cachedEditableInput =
-      inputs.find(
-        (el) =>
-          !el.disabled &&
-          !el.readOnly &&
-          isVisible(el) &&
-          /number|mobile|msisdn|sim|phone|digits|016|\+88016/i.test(
-            `${el.name || ""} ${el.id || ""} ${el.placeholder || ""} ${el.ariaLabel || ""}`
-          )
-      ) ||
-      inputs.find((el) => !el.disabled && !el.readOnly && isVisible(el)) ||
+      scored.find((item) => item.score > INPUT_MIN_ACCEPTABLE_SCORE)?.el ||
+      candidates[0] ||
       null;
 
     return cachedEditableInput;
+  }
+
+  function getLocalContextText(el) {
+    const byFor = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
+    const wrappingLabel = el.closest("label");
+    const section =
+      el.closest("section, article, form, .card, .container, .row") ||
+      el.parentElement;
+    return normalizeSpaceText(
+      `${byFor?.innerText || ""} ${wrappingLabel?.innerText || ""} ${(section?.innerText || "").slice(0, MAX_LOCAL_CONTEXT_TEXT_LENGTH)}`
+    );
+  }
+
+  function scoreInputCandidate(el) {
+    const attrs = normalizeSpaceText(
+      `${el.name || ""} ${el.id || ""} ${el.placeholder || ""} ${el.ariaLabel || ""} ${el.className || ""} ${el.type || ""}`
+    );
+    const context = getLocalContextText(el);
+    const text = `${attrs} ${context}`;
+
+    const positiveStrong =
+      /search a mobile number to start/.test(text) ||
+      /(^|[^\d])\+?\s*88016\s*-/.test(text);
+    const positive =
+      /search|mobile|msisdn|sim number|number search|availability|find number|016|\+88016/.test(text);
+    const negative =
+      /contact number|full name|email|password|login|log in|sign in|otp|verification|personal information|customer details/.test(
+        text
+      );
+
+    let score = 0;
+    if (positiveStrong) {
+      score += INPUT_SCORE_STRONG_MATCH;
+    }
+    if (positive) {
+      score += INPUT_SCORE_MATCH;
+    }
+    if (el.type === "search" || /search/.test(attrs)) {
+      score += INPUT_SCORE_SEARCH_TYPE;
+    }
+    if (negative) {
+      score += INPUT_SCORE_NEGATIVE;
+    }
+    return score;
   }
 
   function setInputValue(input, value) {
@@ -156,6 +274,8 @@
   }
 
   function trySubmitFromInput(input) {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true }));
     const form = input.form;
     if (form) {
       if (typeof form.requestSubmit === "function") {
@@ -168,14 +288,25 @@
     return false;
   }
 
-  function clickSearchButton() {
+  function clickSearchButton(input) {
+    const scope =
+      input.closest("form, section, article, main, .card, .container, .row") ||
+      input.parentElement ||
+      document.body;
     const candidates = Array.from(
-      document.querySelectorAll('button, input[type="submit"], [role="button"]')
+      scope.querySelectorAll('button, input[type="submit"], [role="button"], [aria-label]')
     );
-    const button =
-      candidates.find((el) => /check|search|availability|find|submit|go/i.test(el.innerText || el.value || "")) ||
-      candidates.find((el) => !el.disabled && isVisible(el)) ||
-      null;
+    const button = candidates.find((el) => {
+      const text = normalizeSpaceText(
+        `${el.innerText || ""} ${el.value || ""} ${el.getAttribute("aria-label") || ""}`
+      );
+      return (
+        !el.disabled &&
+        isVisibleElement(el) &&
+        /check|search|availability|find|submit|go|refresh/.test(text) &&
+        !/log in|login|sign in|register|profile|cart|contact/.test(text)
+      );
+    });
 
     if (button && typeof button.click === "function") {
       button.click();
@@ -304,15 +435,22 @@
       throw new Error("Could not find an editable number input on page.");
     }
 
-    const currentDigits = normalizeDigits(input.value);
+    const fieldValue = input.value || "";
+    const fixedPrefixDisplayMatch = fieldValue.match(/^\s*\+\s*88016\s*-\s*/);
+    const fixedPrefixDisplay = fixedPrefixDisplayMatch ? fixedPrefixDisplayMatch[0] : "";
+    const currentDigits = normalizeDigits(fieldValue);
     const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
-    const wantsSuffixOnly =
-      input.maxLength === 8 || currentDigits.startsWith(fixedPrefixDigits);
+    const wantsSuffixOnly = input.maxLength === 8;
+    const finalValue = fixedPrefixDisplay
+      ? `${fixedPrefixDisplay}${suffix}`
+      : wantsSuffixOnly || currentDigits.startsWith(fixedPrefixDigits)
+        ? suffix
+        : `${FIXED_PREFIX}${suffix}`;
 
-    setInputValue(input, wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`);
+    setInputValue(input, finalValue);
 
     if (!trySubmitFromInput(input)) {
-      clickSearchButton();
+      clickSearchButton(input);
     }
 
     const available = await waitForDomAvailability(input, runId);
