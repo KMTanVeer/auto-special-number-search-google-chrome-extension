@@ -458,16 +458,14 @@
     const fallbackSelectors = "p, span, div, li, strong";
 
     const focused = Array.from(scope.querySelectorAll(focusedSelectors));
-    const fallback = focused.length
-      ? []
-      : Array.from(scope.querySelectorAll(fallbackSelectors))
-          .slice(0, MAX_FALLBACK_ELEMENTS)
-          .filter((el) => {
-          const text = normalizeSpaceText(el.textContent);
-          return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
-          });
+    const fallback = Array.from(scope.querySelectorAll(fallbackSelectors))
+      .slice(0, MAX_FALLBACK_ELEMENTS)
+      .filter((el) => {
+        const text = normalizeSpaceText(el.textContent);
+        return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
+      });
 
-    const elements = [...focused, ...fallback].filter(isVisibleElement);
+    const elements = Array.from(new Set([...focused, ...fallback])).filter(isVisibleElement);
     cachedAvailabilityScope = scope;
     cachedAvailabilityElements = elements;
     return elements;
@@ -518,12 +516,9 @@
     // Scope fallback matching near the active search area first; this is faster and avoids unrelated page text.
     const text = normalizeSpaceText((scope?.textContent || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
     if (!text) {
-      return false;
+      return null;
     }
-    if (/\bnot available\b|\bunavailable\b|\balready taken\b|\bnot found\b|\breserved\b/.test(text)) {
-      return false;
-    }
-    return /\b(number|sim|msisdn)?\s*(is|are)\s*available\b|\bavailable\s*number\b/.test(text);
+    return availabilitySignalFromText(text);
   }
 
   async function checkSingleSuffix(suffix, runId) {
