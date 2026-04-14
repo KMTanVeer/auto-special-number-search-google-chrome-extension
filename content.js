@@ -403,6 +403,11 @@
     return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
   }
 
+  function hasAvailabilitySignal(el) {
+    const text = normalizeSpaceText(el?.textContent);
+    return availabilitySignalFromText(text) !== null;
+  }
+
   function getScopeForInput(input) {
     return input.closest("form, section, article, main, .container, .card, .row") || document.body;
   }
@@ -458,10 +463,7 @@
     const fallbackSelectors = "p, span, div, li, strong";
 
     const focused = Array.from(scope.querySelectorAll(focusedSelectors)).filter(isVisibleElement);
-    const focusedWithSignal = focused.filter((el) => {
-      const text = normalizeSpaceText(el.textContent);
-      return availabilitySignalFromText(text) !== null;
-    });
+    const focusedWithSignal = focused.filter(hasAvailabilitySignal);
     if (focusedWithSignal.length) {
       cachedAvailabilityScope = scope;
       cachedAvailabilityElements = focusedWithSignal;
@@ -470,14 +472,13 @@
 
     const fallback = Array.from(scope.querySelectorAll(fallbackSelectors))
       .slice(0, MAX_FALLBACK_ELEMENTS)
-      .filter((el) => {
-        const text = normalizeSpaceText(el.textContent);
-        return availabilitySignalFromText(text) !== null && isVisibleElement(el);
-      });
+      .filter((el) => hasAvailabilitySignal(el) && isVisibleElement(el));
 
     const elements = [...focused];
+    const seen = new Set(elements);
     fallback.forEach((el) => {
-      if (!elements.includes(el)) {
+      if (!seen.has(el)) {
+        seen.add(el);
         elements.push(el);
       }
     });
