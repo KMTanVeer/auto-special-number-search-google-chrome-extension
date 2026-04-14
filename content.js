@@ -462,7 +462,7 @@
       .slice(0, MAX_FALLBACK_ELEMENTS)
       .filter((el) => {
         const text = normalizeSpaceText(el.textContent);
-        return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
+        return availabilitySignalFromText(text) !== null;
       });
 
     const elements = Array.from(new Set([...focused, ...fallback])).filter(isVisibleElement);
