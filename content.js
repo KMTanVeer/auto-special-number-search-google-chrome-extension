@@ -439,7 +439,7 @@
     const currentDigits = normalizeDigits(fieldValue);
     const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
     const inputHints = normalizeSpaceText(
-      `${input.placeholder || ""} ${input.getAttribute("aria-label") || ""} ${input.name || ""} ${input.id || ""}`
+      [input.placeholder, input.getAttribute("aria-label"), input.name, input.id].filter(Boolean).join(" ")
     );
     const inputHintDigits = normalizeDigits(inputHints);
     const wantsSuffixOnly =
