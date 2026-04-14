@@ -441,10 +441,11 @@
     const inputHints = normalizeSpaceText(
       `${input.placeholder || ""} ${input.getAttribute("aria-label") || ""} ${input.name || ""} ${input.id || ""}`
     );
+    const inputHintDigits = normalizeDigits(inputHints);
     const wantsSuffixOnly =
       input.maxLength === 8 ||
       currentDigits.startsWith(fixedPrefixDigits) ||
-      /\+?\s*88016/.test(inputHints);
+      inputHintDigits.includes(fixedPrefixDigits);
     const finalValue = wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`;
 
     setInputValue(input, finalValue);
