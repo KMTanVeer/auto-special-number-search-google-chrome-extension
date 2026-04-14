@@ -6,7 +6,13 @@
   const RESULT_WAIT_TIMEOUT_MS = 4500;
   const RESULT_POLL_INTERVAL_MS = 120;
   const MAX_FALLBACK_ELEMENTS = 300;
+  const MAX_LOCAL_CONTEXT_TEXT_LENGTH = 600;
   const PERSIST_EVERY_N_CHECKS = 10;
+  const INPUT_SCORE_STRONG_MATCH = 120;
+  const INPUT_SCORE_MATCH = 40;
+  const INPUT_SCORE_SEARCH_TYPE = 20;
+  const INPUT_SCORE_NEGATIVE = -200;
+  const INPUT_MIN_ACCEPTABLE_SCORE = -500;
   const SMART_PATTERNS = ["1111", "2222", "1234", "0000", "786", "9999", "1212"];
   const CURATED_SPECIAL_SUFFIXES = [
     "12345678",
@@ -158,7 +164,7 @@
       .sort((a, b) => b.score - a.score);
 
     cachedEditableInput =
-      scored.find((item) => item.score > -500)?.el ||
+      scored.find((item) => item.score > INPUT_MIN_ACCEPTABLE_SCORE)?.el ||
       candidates[0] ||
       null;
 
@@ -172,7 +178,7 @@
       el.closest("section, article, form, .card, .container, .row") ||
       el.parentElement;
     return normalizeSpaceText(
-      `${byFor?.innerText || ""} ${wrappingLabel?.innerText || ""} ${(section?.innerText || "").slice(0, 600)}`
+      `${byFor?.innerText || ""} ${wrappingLabel?.innerText || ""} ${(section?.innerText || "").slice(0, MAX_LOCAL_CONTEXT_TEXT_LENGTH)}`
     );
   }
 
@@ -195,16 +201,16 @@
 
     let score = 0;
     if (positiveStrong) {
-      score += 120;
+      score += INPUT_SCORE_STRONG_MATCH;
     }
     if (positive) {
-      score += 40;
+      score += INPUT_SCORE_MATCH;
     }
     if (el.type === "search" || /search/.test(attrs)) {
-      score += 20;
+      score += INPUT_SCORE_SEARCH_TYPE;
     }
     if (negative) {
-      score -= 200;
+      score += INPUT_SCORE_NEGATIVE;
     }
     return score;
   }
