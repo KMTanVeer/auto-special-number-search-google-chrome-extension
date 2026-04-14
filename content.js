@@ -436,16 +436,16 @@
     }
 
     const fieldValue = input.value || "";
-    const fixedPrefixDisplayMatch = fieldValue.match(/^\s*\+\s*88016\s*-\s*/);
-    const fixedPrefixDisplay = fixedPrefixDisplayMatch ? fixedPrefixDisplayMatch[0] : "";
     const currentDigits = normalizeDigits(fieldValue);
     const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
-    const wantsSuffixOnly = input.maxLength === 8;
-    const finalValue = fixedPrefixDisplay
-      ? `${fixedPrefixDisplay}${suffix}`
-      : wantsSuffixOnly || currentDigits.startsWith(fixedPrefixDigits)
-        ? suffix
-        : `${FIXED_PREFIX}${suffix}`;
+    const inputHints = normalizeSpaceText(
+      `${input.placeholder || ""} ${input.getAttribute("aria-label") || ""} ${input.name || ""} ${input.id || ""}`
+    );
+    const wantsSuffixOnly =
+      input.maxLength === 8 ||
+      currentDigits.startsWith(fixedPrefixDigits) ||
+      /\+?\s*88016/.test(inputHints);
+    const finalValue = wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`;
 
     setInputValue(input, finalValue);
 
