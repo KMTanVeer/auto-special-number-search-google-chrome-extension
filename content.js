@@ -336,6 +336,10 @@
     return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
   }
 
+  function getScopeForInput(input) {
+    return input.closest("form, section, article, main, .container, .card, .row") || document.body;
+  }
+
   function availabilitySignalFromText(text) {
     const normalized = normalizeSpaceText(text);
     if (!normalized) {
@@ -358,7 +362,7 @@
   }
 
   function collectAvailabilityElements(input, forceRefresh = false) {
-    const scope = input.closest("form, section, article, main, .container, .card, .row") || document.body;
+    const scope = getScopeForInput(input);
     if (
       !forceRefresh &&
       cachedAvailabilityScope === scope &&
@@ -443,10 +447,9 @@
       await sleep(RESULT_POLL_INTERVAL_MS);
     }
 
-    const scope =
-      input.closest("form, section, article, main, .container, .card, .row") || document.body;
+    const scope = getScopeForInput(input);
     // Scope fallback matching near the active search area first; this is faster and avoids unrelated page text.
-    const text = normalizeSpaceText((scope?.innerText || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
+    const text = normalizeSpaceText((scope?.textContent || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
     if (!text) {
       return false;
     }
