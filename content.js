@@ -1,7 +1,7 @@
 (() => {
   const FIXED_PREFIX = "+88016";
   const TOTAL_CHECKS = 1000;
-  const DELAY_MS = 1400;
+  const REQUEST_SETTLE_DELAY_MS = 1400;
 
   const state = {
     running: false,
@@ -11,6 +11,7 @@
     foundNumbers: [],
     lastError: ""
   };
+  let cachedEditableInput = null;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -58,7 +59,7 @@
 
     specialSeeds.forEach(add);
 
-    for (let i = 0; output.length < count && i < 100000; i += 1) {
+    for (let i = 0; output.length < count; i += 1) {
       const d = String(i % 10);
       const e = String((i + 3) % 10);
       add(`${d}${d}${e}${e}${d}${d}${e}${e}`);
@@ -81,11 +82,21 @@
   }
 
   function findEditableInput() {
+    if (
+      cachedEditableInput &&
+      cachedEditableInput.isConnected &&
+      !cachedEditableInput.disabled &&
+      !cachedEditableInput.readOnly &&
+      isVisible(cachedEditableInput)
+    ) {
+      return cachedEditableInput;
+    }
+
     const inputs = Array.from(
       document.querySelectorAll('input[type="text"], input[type="tel"], input:not([type])')
     );
 
-    return (
+    cachedEditableInput =
       inputs.find(
         (el) =>
           !el.disabled &&
@@ -96,8 +107,9 @@
           )
       ) ||
       inputs.find((el) => !el.disabled && !el.readOnly && isVisible(el)) ||
-      null
-    );
+      null;
+
+    return cachedEditableInput;
   }
 
   function setInputValue(input, value) {
@@ -137,14 +149,17 @@
   }
 
   function pageSaysAvailable() {
-    const text = (document.body?.innerText || "").toLowerCase();
+    const text = (document.body?.innerText || "").toLowerCase().replace(/\s+/g, " ");
     if (!text) {
       return false;
     }
-    if (/\bnot available\b|\bunavailable\b/.test(text)) {
+    if (/\bnot available\b|\bunavailable\b|\balready taken\b|\bnot found\b/.test(text)) {
       return false;
     }
-    return /\bis available\b|\bavailable\b/.test(text);
+    return (
+      /\b(number|sim|msisdn)?\s*(is|are)\s*available\b/.test(text) ||
+      /\bavailable\s*number\b/.test(text)
+    );
   }
 
   async function checkSingleSuffix(suffix) {
@@ -154,7 +169,9 @@
     }
 
     const currentDigits = normalizeDigits(input.value);
-    const wantsSuffixOnly = Number(input.maxLength) === 8 || currentDigits.startsWith("88016");
+    const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
+    const wantsSuffixOnly =
+      input.maxLength === 8 || currentDigits.startsWith(fixedPrefixDigits);
 
     setInputValue(input, wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`);
 
@@ -162,7 +179,7 @@
       clickSearchButton();
     }
 
-    await sleep(DELAY_MS);
+    await sleep(REQUEST_SETTLE_DELAY_MS);
     return pageSaysAvailable();
   }
 

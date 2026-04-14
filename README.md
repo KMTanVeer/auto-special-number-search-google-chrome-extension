@@ -14,7 +14,7 @@ You can copy all found numbers to clipboard from the popup.
 2. Enable **Developer mode**
 3. Click **Load unpacked**
 4. Select this repository folder:
-   - `/home/runner/work/auto-special-number-search-google-chrome-extension/auto-special-number-search-google-chrome-extension`
+   - the local folder containing `manifest.json`
 
 ## Usage
 

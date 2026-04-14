@@ -4,6 +4,7 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn = document.getElementById("stopBtn");
 const copyBtn = document.getElementById("copyBtn");
 const clearBtn = document.getElementById("clearBtn");
+const REFRESH_INTERVAL_MS = 2000;
 
 async function getActiveTabId() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -90,4 +91,8 @@ clearBtn.addEventListener("click", async () => {
 });
 
 refreshState();
-setInterval(refreshState, 2000);
+const refreshTimer = setInterval(refreshState, REFRESH_INTERVAL_MS);
+
+window.addEventListener("unload", () => {
+  clearInterval(refreshTimer);
+});
