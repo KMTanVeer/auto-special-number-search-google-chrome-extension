@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Airtel BD Special Number Checker",
+  "version": "1.0.0",
+  "description": "Automatically checks +88016XXXXXXXX number availability on Airtel BD sim-services page.",
+  "permissions": ["storage", "activeTab", "scripting", "clipboardWrite"],
+  "host_permissions": ["https://www.bd.airtel.com/*"],
+  "action": {
+    "default_title": "Special Number Checker",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.bd.airtel.com/en/sim-services*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
