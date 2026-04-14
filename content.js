@@ -8,6 +8,24 @@
   const MAX_FALLBACK_ELEMENTS = 300;
   const PERSIST_EVERY_N_CHECKS = 10;
   const SMART_PATTERNS = ["1111", "2222", "1234", "0000", "786", "9999", "1212"];
+  const CURATED_SPECIAL_SUFFIXES = [
+    "12345678",
+    "87654321",
+    "11223344",
+    "44332211",
+    "12121212",
+    "56565656",
+    "16000016",
+    "16888888",
+    "16777777",
+    "16666666",
+    "10000001",
+    "10203040",
+    "13572468",
+    "24681357",
+    "31415926",
+    "27182818"
+  ];
   const PRIORITY_FULL_NUMBERS = ["+8801632231309"];
 
   const state = {
@@ -65,6 +83,7 @@
     };
 
     PRIORITY_FULL_NUMBERS.forEach((full) => add(normalizeDigits(full).slice(-8)));
+    CURATED_SPECIAL_SUFFIXES.forEach(add);
 
     SMART_PATTERNS.forEach((pattern) => {
       const reversed = pattern.split("").reverse().join("");
@@ -103,6 +122,7 @@
       add(`${d}${e}${f}${d}${e}${f}${d}${e}`);
       add(`${i}`.padStart(4, "0").repeat(2));
       add(`${i}`.padStart(8, "0").split("").reverse().join(""));
+      add(String(randomBetween(0, 99999999)).padStart(8, "0"));
     }
 
     return output.slice(0, count);
@@ -132,20 +152,61 @@
       document.querySelectorAll('input[type="text"], input[type="tel"], input:not([type])')
     );
 
+    const candidates = inputs.filter((el) => !el.disabled && !el.readOnly && isVisible(el));
+    const scored = candidates
+      .map((el) => ({ el, score: scoreInputCandidate(el) }))
+      .sort((a, b) => b.score - a.score);
+
     cachedEditableInput =
-      inputs.find(
-        (el) =>
-          !el.disabled &&
-          !el.readOnly &&
-          isVisible(el) &&
-          /number|mobile|msisdn|sim|phone|digits|016|\+88016/i.test(
-            `${el.name || ""} ${el.id || ""} ${el.placeholder || ""} ${el.ariaLabel || ""}`
-          )
-      ) ||
-      inputs.find((el) => !el.disabled && !el.readOnly && isVisible(el)) ||
+      scored.find((item) => item.score > -500)?.el ||
+      candidates[0] ||
       null;
 
     return cachedEditableInput;
+  }
+
+  function getLocalContextText(el) {
+    const byFor = el.id ? document.querySelector(`label[for="${el.id}"]`) : null;
+    const wrappingLabel = el.closest("label");
+    const section =
+      el.closest("section, article, form, .card, .container, .row") ||
+      el.parentElement;
+    return normalizeSpaceText(
+      `${byFor?.innerText || ""} ${wrappingLabel?.innerText || ""} ${(section?.innerText || "").slice(0, 600)}`
+    );
+  }
+
+  function scoreInputCandidate(el) {
+    const attrs = normalizeSpaceText(
+      `${el.name || ""} ${el.id || ""} ${el.placeholder || ""} ${el.ariaLabel || ""} ${el.className || ""} ${el.type || ""}`
+    );
+    const context = getLocalContextText(el);
+    const text = `${attrs} ${context}`;
+
+    const positiveStrong =
+      /search a mobile number to start/.test(text) ||
+      /(^|[^\d])\+?\s*88016\s*-/.test(text);
+    const positive =
+      /search|mobile|msisdn|sim number|number search|availability|find number|016|\+88016/.test(text);
+    const negative =
+      /contact number|full name|email|password|login|log in|sign in|otp|verification|personal information|customer details/.test(
+        text
+      );
+
+    let score = 0;
+    if (positiveStrong) {
+      score += 120;
+    }
+    if (positive) {
+      score += 40;
+    }
+    if (el.type === "search" || /search/.test(attrs)) {
+      score += 20;
+    }
+    if (negative) {
+      score -= 200;
+    }
+    return score;
   }
 
   function setInputValue(input, value) {
@@ -156,6 +217,8 @@
   }
 
   function trySubmitFromInput(input) {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", bubbles: true }));
     const form = input.form;
     if (form) {
       if (typeof form.requestSubmit === "function") {
@@ -168,14 +231,25 @@
     return false;
   }
 
-  function clickSearchButton() {
+  function clickSearchButton(input) {
+    const scope =
+      input.closest("form, section, article, main, .card, .container, .row") ||
+      input.parentElement ||
+      document.body;
     const candidates = Array.from(
-      document.querySelectorAll('button, input[type="submit"], [role="button"]')
+      scope.querySelectorAll('button, input[type="submit"], [role="button"], [aria-label]')
     );
-    const button =
-      candidates.find((el) => /check|search|availability|find|submit|go/i.test(el.innerText || el.value || "")) ||
-      candidates.find((el) => !el.disabled && isVisible(el)) ||
-      null;
+    const button = candidates.find((el) => {
+      const text = normalizeSpaceText(
+        `${el.innerText || ""} ${el.value || ""} ${el.getAttribute("aria-label") || ""}`
+      );
+      return (
+        !el.disabled &&
+        isVisibleElement(el) &&
+        /check|search|availability|find|submit|go|refresh/.test(text) &&
+        !/log in|login|sign in|register|profile|cart|contact/.test(text)
+      );
+    });
 
     if (button && typeof button.click === "function") {
       button.click();
@@ -304,15 +378,22 @@
       throw new Error("Could not find an editable number input on page.");
     }
 
-    const currentDigits = normalizeDigits(input.value);
+    const fieldValue = input.value || "";
+    const fixedPrefixDisplayMatch = fieldValue.match(/^\s*\+\s*88016\s*-\s*/);
+    const fixedPrefixDisplay = fixedPrefixDisplayMatch ? fixedPrefixDisplayMatch[0] : "";
+    const currentDigits = normalizeDigits(fieldValue);
     const fixedPrefixDigits = normalizeDigits(FIXED_PREFIX);
-    const wantsSuffixOnly =
-      input.maxLength === 8 || currentDigits.startsWith(fixedPrefixDigits);
+    const wantsSuffixOnly = input.maxLength === 8;
+    const finalValue = fixedPrefixDisplay
+      ? `${fixedPrefixDisplay}${suffix}`
+      : wantsSuffixOnly || currentDigits.startsWith(fixedPrefixDigits)
+        ? suffix
+        : `${FIXED_PREFIX}${suffix}`;
 
-    setInputValue(input, wantsSuffixOnly ? suffix : `${FIXED_PREFIX}${suffix}`);
+    setInputValue(input, finalValue);
 
     if (!trySubmitFromInput(input)) {
-      clickSearchButton();
+      clickSearchButton(input);
     }
 
     const available = await waitForDomAvailability(input, runId);
