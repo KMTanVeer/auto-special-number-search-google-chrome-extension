@@ -1,11 +1,14 @@
 (() => {
   const FIXED_PREFIX = "+88016";
   const TOTAL_CHECKS = 1000;
-  const MIN_DELAY_MS = 300;
-  const MAX_DELAY_MS = 700;
-  const RESULT_WAIT_TIMEOUT_MS = 4500;
-  const RESULT_POLL_INTERVAL_MS = 120;
+  const MIN_DELAY_MS = 120;
+  const MAX_DELAY_MS = 260;
+  const RESULT_WAIT_TIMEOUT_MS = 2800;
+  const RESULT_POLL_INTERVAL_MS = 80;
   const MAX_FALLBACK_ELEMENTS = 300;
+  const REFRESH_AVAILABILITY_ELEMENTS_EVERY_N_POLLS = 6;
+  // Cap scoped text fallback size to avoid scanning very large pages on each timed-out check.
+  const MAX_SCOPED_FALLBACK_TEXT_LENGTH = 8000;
   const MAX_LOCAL_CONTEXT_TEXT_LENGTH = 600;
   const PERSIST_EVERY_N_CHECKS = 10;
   const INPUT_SCORE_STRONG_MATCH = 120;
@@ -28,6 +31,8 @@
   };
   let cachedEditableInput = null;
   let cachedCandidates = null;
+  let cachedAvailabilityScope = null;
+  let cachedAvailabilityElements = null;
   let activeRunId = 0;
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -126,7 +131,74 @@
       }
     }
 
-    // 8. SMART_PATTERNS original expansions
+    // 8. Double 4-digit palindromes: two independent abba halves concatenated.
+    // Produces patterns like 3223+1331 or 1221+4334 — each 4-digit half is its own palindrome,
+    // so the full number is memorable in two chunks but not an obvious pure repeat.
+    // Slots are distributed evenly across all curated first halves so digit variety is guaranteed.
+    {
+      const allPalHalves = [];
+      for (let a = 0; a <= 9; a += 1) {
+        for (let b = 0; b <= 9; b += 1) {
+          if (a !== b) {
+            allPalHalves.push(`${a}${b}${b}${a}`);
+          }
+        }
+      }
+      // Memorable first halves: staircase, adjacent, and common digit-pair palindromes.
+      const featuredFirstHalves = [
+        "1221", "1331", "1441", "1551", "1661", "1771", "1881", "1991",
+        "2112", "2332", "2442", "2552", "3113", "3223", "3443", "3553",
+        "4334", "4554", "5445", "5665", "6556", "7667", "7887", "9889"
+      ];
+      // Round-robin: iterate second half first so every featured first-half gets equal exposure.
+      for (let j = 0; j < allPalHalves.length && output.length < count; j += 1) {
+        featuredFirstHalves.forEach((h1) => {
+          if (output.length < count) {
+            add(h1 + allPalHalves[j]);
+          }
+        });
+      }
+      // Fill remaining slots with any unused palindrome-half pairings.
+      for (let i = 0; i < allPalHalves.length && output.length < count; i += 1) {
+        for (let j = 0; j < allPalHalves.length && output.length < count; j += 1) {
+          add(allPalHalves[i] + allPalHalves[j]);
+        }
+      }
+    }
+
+    // 8b. Shifted double-sequential halves: two 4-digit ascending runs with an offset.
+    // e.g. 1234+2345, 2345+6789, 3456+1234 — recalled as "two runs with a jump".
+    for (let start = 0; start <= 9 && output.length < count; start += 1) {
+      const half1 = Array.from({ length: 4 }, (_, k) => (start + k) % 10).join("");
+      const rev1 = half1.split("").reverse().join("");
+      for (let shift = 1; shift <= 5 && output.length < count; shift += 1) {
+        const half2 = Array.from({ length: 4 }, (_, k) => (start + k + shift) % 10).join("");
+        const rev2 = half2.split("").reverse().join("");
+        add(half1 + half2);
+        add(half2 + half1);
+        add(rev1 + half2);
+        add(half1 + rev2);
+        add(rev1 + rev2);
+      }
+    }
+
+    // 8c. Lucky-core 4-digit half paired with a 4-digit palindrome half.
+    // Blends cultural familiarity (786, 888…) with structural memorability.
+    for (let a = 0; a <= 9 && output.length < count; a += 1) {
+      for (let b = 0; b <= 9 && output.length < count; b += 1) {
+        if (a === b) {
+          continue;
+        }
+        const pal4 = `${a}${b}${b}${a}`;
+        for (let li = 0; li < LUCKY_CORES.length && output.length < count; li += 1) {
+          const lc4 = expandPatternTo8Digits(LUCKY_CORES[li]).slice(0, 4);
+          add(lc4 + pal4);
+          add(pal4 + lc4);
+        }
+      }
+    }
+
+    // 9. SMART_PATTERNS original expansions
     SMART_PATTERNS.forEach((pattern) => {
       const reversed = pattern.split("").reverse().join("");
       add(pattern);
@@ -154,7 +226,7 @@
       });
     }
 
-    // 9. Mirror / palindrome bulk filler (abcddcba): every 4-digit half
+    // 10. Mirror / palindrome bulk filler (abcddcba): every 4-digit half
     for (let half = 1000; half <= 9999 && output.length < count; half += 1) {
       const h = String(half);
       add(h + h.split("").reverse().join(""));
@@ -168,7 +240,7 @@
       add(ba + ab + ba + ab);
     }
 
-    // 10. Arithmetic fill until count is satisfied
+    // 11. Arithmetic fill until count is satisfied
     for (let i = 0; output.length < count; i += 1) {
       const d = String(i % 10);
       const e = String((i + 3) % 10);
@@ -331,6 +403,10 @@
     return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
   }
 
+  function getScopeForInput(input) {
+    return input.closest("form, section, article, main, .container, .card, .row") || document.body;
+  }
+
   function availabilitySignalFromText(text) {
     const normalized = normalizeSpaceText(text);
     if (!normalized) {
@@ -352,8 +428,19 @@
     return null;
   }
 
-  function collectAvailabilityElements(input) {
-    const scope = input.closest("form, section, article, main, .container, .card, .row") || document.body;
+  function collectAvailabilityElements(input, forceRefresh = false) {
+    const scope = getScopeForInput(input);
+    if (
+      !forceRefresh &&
+      cachedAvailabilityScope === scope &&
+      Array.isArray(cachedAvailabilityElements) &&
+      cachedAvailabilityElements.length
+    ) {
+      if (cachedAvailabilityElements.every((el) => el?.isConnected)) {
+        return cachedAvailabilityElements;
+      }
+    }
+
     const focusedSelectors = [
       '[aria-live]',
       '[role="status"]',
@@ -380,11 +467,14 @@
           return /\bavailable\b|\bunavailable\b|\bnot available\b|\balready taken\b/.test(text);
           });
 
-    return [...focused, ...fallback].filter(isVisibleElement);
+    const elements = [...focused, ...fallback].filter(isVisibleElement);
+    cachedAvailabilityScope = scope;
+    cachedAvailabilityElements = elements;
+    return elements;
   }
 
-  function detectAvailabilityFromDom(input) {
-    const candidates = collectAvailabilityElements(input);
+  function detectAvailabilityFromDom(input, forceRefresh = false) {
+    const candidates = collectAvailabilityElements(input, forceRefresh);
     if (candidates.length === 0) {
       return null;
     }
@@ -408,18 +498,25 @@
 
   async function waitForDomAvailability(input, runId) {
     const start = Date.now();
+    let pollCount = 0;
     while (Date.now() - start < RESULT_WAIT_TIMEOUT_MS) {
       if (isRunCancelled(runId)) {
         return null;
       }
-      const signal = detectAvailabilityFromDom(input);
+      pollCount += 1;
+      const signal = detectAvailabilityFromDom(
+        input,
+        pollCount % REFRESH_AVAILABILITY_ELEMENTS_EVERY_N_POLLS === 0
+      );
       if (signal !== null) {
         return signal;
       }
       await sleep(RESULT_POLL_INTERVAL_MS);
     }
 
-    const text = normalizeSpaceText(document.body?.innerText || "");
+    const scope = getScopeForInput(input);
+    // Scope fallback matching near the active search area first; this is faster and avoids unrelated page text.
+    const text = normalizeSpaceText((scope?.textContent || "").slice(0, MAX_SCOPED_FALLBACK_TEXT_LENGTH));
     if (!text) {
       return false;
     }
@@ -514,6 +611,8 @@
     activeRunId += 1;
     state.running = false;
     state.currentNumber = "";
+    cachedAvailabilityScope = null;
+    cachedAvailabilityElements = null;
   }
 
   async function loadSearchData() {
@@ -545,6 +644,8 @@
       state.checked = 0;
       state.currentNumber = "";
       state.lastError = "";
+      cachedAvailabilityScope = null;
+      cachedAvailabilityElements = null;
       persistSearchData().finally(() => sendResponse({ ok: true }));
       return true;
     }
