@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Special Number Checker</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        width: 320px;
+        font-family: Arial, sans-serif;
+        font-size: 13px;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      button {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: #f7f7f7;
+        padding: 6px 8px;
+        cursor: pointer;
+      }
+      #status {
+        margin: 8px 0;
+      }
+      #numbers {
+        max-height: 180px;
+        overflow: auto;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 8px;
+        white-space: pre-line;
+        background: #fff;
+      }
+      .muted {
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Airtel Special Number Checker</h1>
+    <div class="row">
+      <button id="startBtn">Start 1000 Checks</button>
+      <button id="stopBtn">Stop</button>
+    </div>
+    <div class="row">
+      <button id="copyBtn">Copy Found Numbers</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+    <div id="status" class="muted">Status: idle</div>
+    <div id="numbers" class="muted">No numbers found yet.</div>
+    <script src="popup.js"></script>
+  </body>
+</html>
